@@ -1,5 +1,6 @@
 #include <stdio.h>  
 #include <string.h>
+#include <stdlib.h>
 #include <sys/types.h>  
 #include <sys/socket.h>  
 #include <netinet/in.h>  
@@ -14,6 +15,7 @@ int main(int argc, char *argv[])
     struct sockaddr_in remote_addr; //客户端网络地址结构体  
     int sin_size;  
     char buf[BUFSIZ];  //数据传送的缓冲区  
+    int pid;
     bzero(&my_addr,sizeof(my_addr)); //数据初始化--清零  
     my_addr.sin_family=AF_INET; //设置为IP通信  
     my_addr.sin_addr.s_addr=INADDR_ANY;//服务器IP地址--允许连接到所有本地地址上  
@@ -37,28 +39,34 @@ int main(int argc, char *argv[])
     listen(server_sockfd,5);  
       
     sin_size=sizeof(struct sockaddr_in);  
-      
-    /*等待客户端连接请求到达*/  
-    if((client_sockfd=accept(server_sockfd,(struct sockaddr *)&remote_addr,&sin_size))<0)  
-    {  
-        perror("accept");  
-        return 1;  
-    }  
-    printf("accept client %s\n",inet_ntoa(remote_addr.sin_addr));  
-    len=send(client_sockfd,"Welcome to my server\n",21,0);//发送欢迎信息  
-      
-    /*接收客户端的数据并将其发送给客户端--recv返回接收到的字节数，send返回发送的字节数*/  
-    while((len=recv(client_sockfd,buf,BUFSIZ,0))>0)
-    {  
-        buf[len]='\0';  
-        printf("%s\n",buf);  
-        if(send(client_sockfd,buf,len,0)<0)  
+    for (;;){
+
+        /*等待客户端连接请求到达*/  
+        if((client_sockfd=accept(server_sockfd,(struct sockaddr *)&remote_addr,&sin_size))<0)  
         {  
-            perror("write");  
+            perror("accept");  
             return 1;  
         }  
-    }  
-    close(client_sockfd);  
-    close(server_sockfd);  
-        return 0;  
+        printf("accept client %s\n",inet_ntoa(remote_addr.sin_addr));  
+        len=send(client_sockfd,"Welcome to my server\n",21,0);//发送欢迎信息  
+        if ((pid = fork()) == 0){
+            while((len=recv(client_sockfd,buf,BUFSIZ,0))>0)
+            {  
+                buf[len]='\0';  
+                printf("%s\n",buf);  
+                if(send(client_sockfd,buf,len,0)<0)  
+                {  
+                    perror("write");  
+                    return 1;  
+                }  
+            }  
+            close(client_sockfd);  
+            close(server_sockfd);  
+            exit(0);
+        }
+        close(client_sockfd);
+    }
+      
+    /*接收客户端的数据并将其发送给客户端--recv返回接收到的字节数，send返回发送的字节数*/  
+    return 0;  
 }  
