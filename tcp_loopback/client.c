@@ -7,18 +7,20 @@
 
 #define TARGET_IP "192.168.1.14" 
 #define TARGET_PORT 30099
+//#define NONBLOCKING
 
-int main(){
-    int sockfd;
-    struct sockaddr_in servaddr, cliaddr;
-    char buf[1024] = "HELLO";
-    int len, n, optval;
-    // create random stocket
-    if((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0){
+int create_socket(int *sockfd, const int type)
+{
+    if((*sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0){
         perror("socket");
         return -1;
     }
-    // prepare server addr
+    return 0;
+}
+
+int connect_server(const int sockfd)
+{
+    struct sockaddr_in servaddr;
     bzero(&servaddr, sizeof(servaddr));
     servaddr.sin_family = AF_INET; 
     inet_pton(AF_INET, TARGET_IP, &servaddr.sin_addr.s_addr);
@@ -27,21 +29,45 @@ int main(){
         perror("connect");
         return -1;
     }
+}
+
+int loop_forever(const int sockfd)
+{
+    int size, flags;
+    struct sockaddr_in cliaddr;
+    char buf[1024] = "HELLO";
+#ifdef NONBLOCKING
+    flags = MSG_DONTWAIT;
+#else
+    flags = 0;
+#endif
+    //size = send(sockfd, buf, sizeof(buf), flags);
+    if ((size = sendto(sockfd, buf, sizeof(buf), flags, NULL, 0)) < 0){
+        perror("sendto");
+        return -1;
+    }
+    printf("send %s size:%d fd:%d\n", buf, size, sockfd);
+    bzero(buf, sizeof(buf));
+    sleep(1);
+    //size = recv(sockfd, buf, sizeof(buf), flags);
+    if ((size = recvfrom(sockfd, buf, sizeof(buf), flags, NULL, NULL)) < 0){
+        perror("recvfrom");
+        return -1;
+    }
+    printf("recv %s size:%d fd:%d\n", buf, size, sockfd);
+    sleep(1);
+    return 0;
+}
+
+int main(){
+    int sockfd;
+    // create socket
+    create_socket(&sockfd, SOCK_STREAM);
+    // connect to server
+    connect_server(sockfd);
     // send to server
     for(;;){
-        if (sendto(sockfd, (void *)buf, sizeof(buf), 0, (struct sockaddr *)&servaddr, sizeof(servaddr)) < 0){
-            perror("sendto");
-            return 1;
-        }
-        printf("send %s\n", buf);
-        bzero(buf, 1024);
-        sleep(1);
-        if ((n = recvfrom(sockfd, (void *)buf, sizeof(buf), 0, NULL, NULL)) < 0){
-            perror("recvfrom");
-            return 1;
-        }
-        printf("recv %s\n", buf);
-        sleep(1);
+        loop_forever(sockfd);
     }
     return 0;
 }
