@@ -7,20 +7,33 @@
 #include <stdio.h>
 #include <strings.h>
 #include <unistd.h>
+#include <errno.h>
 
 #define LISTEN_IP "192.168.1.14" 
 #define LISTEN_PORT 30099
 #define MAXLINE 8096
-#define MAXCONN 8096
+#define MAXCONN FD_SETSIZE
+
 inline int max(int a, int b){if (a>b) return a;else return b;}
 
+ssize_t Recvfrom(int sockfd, void *buf, size_t len, int flags, struct sockaddr *src_addr, socklen_t *addrlen){
+    ssize_t n;
+    if((n = recvfrom(sockfd, buf, len, flags, src_addr, addrlen)) < 0){
+        perror("recvfrom");
+    }
+    return n;
+}
+
 int main(){
-    int sockfd, connfd, maxfdsize;
+    int sockfd, connfd, maxfd, maxfdsize;
     struct sockaddr_in servaddr, cliaddr;
     char buf[MAXLINE];
-    int client[MAXCONN] = {-1,-1,-1,-1,-1,-1,-1,-1,-1,-1};
+    int client[MAXCONN];
     int n, optval, len, nready, i;
     fd_set rset;
+    for (i=0; i<MAXCONN; i++){
+        client[i] = -1;
+    }
     //socket
     if((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0){
         perror("socket");
@@ -35,33 +48,43 @@ int main(){
         perror("bind");
         return 1;
     }
+    //listen
     listen(sockfd, 5);
+
     //select
     FD_ZERO(&rset);
+    maxfd = -1;
     for(;;){
+        // accept connection
         FD_SET(sockfd, &rset);
-        maxfdsize = max(sockfd, connfd);
+        maxfdsize = max(sockfd, maxfd);
         if ((nready = select(maxfdsize + 1, &rset, NULL, NULL, NULL)) < 0 ){
-            perror("select");
+            if (errno == EINTR)
+                continue;
+            else
+                perror("select");
         }
         if (FD_ISSET(sockfd, &rset)){ // new connection
             len = sizeof(cliaddr);
             connfd = accept(sockfd, (struct sockaddr *)&cliaddr, &len);
+            if(connfd > maxfd) maxfd = connfd;
             for (i = 0; i < MAXCONN; i++){
                 if(client[i] < 0) break;
             }
             client[i] = connfd;
+            FD_SET(connfd, &rset);
+            printf("accepted connection! fd:%d\n", connfd);
         }
+        // process request
         for (i = 0; i < MAXCONN; i++){
-            connfd = client[i];
+            if((connfd = client[i]) < 0){
+                continue;
+            }
             if(FD_ISSET(connfd, &rset)){
-                if ((n = recvfrom(connfd, buf, MAXLINE, 0, (struct sockaddr *)&cliaddr, &len)) < 0){
-                    perror("receive");
-                    close(connfd);
-                    continue;
-                }
-                printf("receive %s %d\n", buf, n);
+                n = Recvfrom(connfd, buf, MAXLINE, 0, (struct sockaddr *)&cliaddr, &len);
+                printf("receive %s %d %d\n", buf, n, connfd);
                 sendto(connfd, (void *)buf, n, 0, (struct sockaddr *)&cliaddr, len);
+                printf("send %s %d %d\n", buf, n, connfd);
             }
         }
     }
