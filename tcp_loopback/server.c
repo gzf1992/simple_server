@@ -9,7 +9,8 @@
 #include <unistd.h>
 #include <errno.h>
 
-#define LISTEN_IP "192.168.1.14" 
+//#define LISTEN_IP "192.168.1.14"
+#define LISTEN_IP "127.0.0.1"
 #define LISTEN_PORT 30099
 #define MAXLINE 8096
 //#define NONBLOCKING
@@ -49,6 +50,7 @@ int wait_loop_forever(const int connfd, fd_set *rset, int *max_fd){
 #else
     flags = 0;
 #endif
+    FD_SET(connfd, rset);
     // blocking
     if((nready = select(*max_fd + 1, rset, NULL, NULL, NULL)) < 0){
         perror("select");
@@ -56,19 +58,22 @@ int wait_loop_forever(const int connfd, fd_set *rset, int *max_fd){
     }
     // process connfd
     if(FD_ISSET(connfd, rset)){
-        if (sockfd = accept(connfd, (struct sockaddr *)&cliaddr, &len) < 0){
+        len = sizeof(cliaddr);
+        if ((sockfd = accept(connfd, (struct sockaddr *)&cliaddr, &len)) < 0){
             perror("accept");
             return -1;
         }
         for (i=0; i<FD_SETSIZE; i++){
-            if(connections[i] < 0)
+            if(connections[i] < 0){
                 connections[i] = sockfd;
+                FD_SET(sockfd, rset);
+            }
             if (sockfd > *max_fd)
                 *max_fd = sockfd;
         }
-        inet_ntop(AF_INET, &cliaddr, ipstring, sizeof(ipstring));
 
-        printf("Accepted connection: %s %d at fd:%d\n", ipstring, ntohs(cliaddr.sin_port), sockfd);
+        printf("Accepted connection: %s %d at fd:%d\n",
+                inet_ntoa(cliaddr.sin_addr), ntohs(cliaddr.sin_port), sockfd);
         nready--;
     }
     // process sockfds

@@ -5,7 +5,8 @@
 #include <strings.h>
 #include <stdio.h>
 
-#define TARGET_IP "192.168.1.14" 
+//#define TARGET_IP "192.168.1.14" 
+#define TARGET_IP "127.0.0.1"
 #define TARGET_PORT 30099
 //#define NONBLOCKING
 
